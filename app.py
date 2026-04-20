@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import tqdm
 from collections import OrderedDict
 from datetime import datetime
 
