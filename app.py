@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 from tqdm import tqdm
 
-# --- AZ EREDETI KÓDOD (VÁLTOZATLAN) ---
+# --- AZ EREDETI KÓDOD (VÁLTOZATLAN LOGIKA) ---
 
 VEHICLE_TYPE_ID_MAP = {
     1: {'VehicleTypeName': 'Motorcycle'},
@@ -31,8 +31,8 @@ def _make_api_request(path):
     url = f"https://dot.gov{path}"
     url += "&format=json" if "&" in path else "?format=json"
     try:
+        # Hibatűrő lekérés időkorláttal
         response = requests.get(url, timeout=10)
-        # Itt történik a javítás: ellenőrizzük a választ
         if response.status_code == 200:
             return response.json().get("Results")
         return None
@@ -67,7 +67,7 @@ def fetch_models_for_make_id(make_id):
                 })
     return models
 
-# --- GUI ÉS MAGYARÍTÁS (HIBATŰRŐ MÓDON) ---
+# --- GUI ÉS MAGYARÍTÁS (JAVÍTVA) ---
 
 translations = {
     "hu": {
@@ -77,7 +77,7 @@ translations = {
         "select_year": "Évjárat",
         "results": "Találatok",
         "loading": "Adatok lekérése a hivatalos szerverről...",
-        "api_error": "Az API szerver jelenleg nem elérhető. Próbáld újra később!"
+        "api_error": "Az API szerver nem válaszol. Próbáld újra!"
     },
     "en": {
         "title": "🚗 Professional Vehicle DB",
@@ -86,16 +86,16 @@ translations = {
         "select_year": "Year Range",
         "results": "Results",
         "loading": "Fetching data from servers...",
-        "api_error": "API server is currently unavailable. Please try again later!"
+        "api_error": "API server not responding. Please try again!"
     }
 }
 
 st.set_page_config(page_title="AutoDB", layout="wide")
 
-# Nyelvválasztó
-_, lang_col = st.columns()
+# JAVÍTOTT: Megadtuk a 2-es számot az oszlopoknak
+col_space, lang_col = st.columns(2)
 with lang_col:
-    lang_choice = st.radio("Language", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
+    lang_choice = st.radio("Language / Nyelv", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
     t = translations["hu" if "🇭🇺" in lang_choice else "en"]
 
 st.title(t["title"])
@@ -104,14 +104,14 @@ st.title(t["title"])
 def get_makes_safe():
     res = fetch_all_makes()
     if not res:
-        # Ha az API elszáll, betöltünk egy alap listát, hogy az app ne álljon le
-        return [{"make_id": 440, "make_name": "ASTON MARTIN"}, {"make_id": 441, "make_name": "TESLA"}, {"make_id": 442, "make_name": "BMW"}]
+        # Vészhelyzeti lista, ha a szerver nem elérhető
+        return [{"make_id": 441, "make_name": "TESLA"}, {"make_id": 442, "make_name": "BMW"}, {"make_id": 485, "make_name": "VOLKSWAGEN"}]
     return res
 
 with st.spinner(t["loading"]):
     all_makes = get_makes_safe()
 
-# Sidebar
+# Sidebar form (Használtautó stílus)
 with st.sidebar:
     with st.form("search_form"):
         st.header("Szűrők")
@@ -121,7 +121,7 @@ with st.sidebar:
         years = st.slider(t["select_year"], 1981, CURRENT_YEAR + 1, (2015, CURRENT_YEAR))
         submit = st.form_submit_button(t["search_btn"])
 
-# Eredmények
+# Eredmények megjelenítése
 if submit:
     with st.spinner(t["loading"]):
         models = fetch_models_for_make_id(selected_make_id)
@@ -131,4 +131,4 @@ if submit:
         else:
             st.error(t["api_error"])
 else:
-    st.info("💡 " + ("Válassz egy márkát bal oldalt!" if "🇭🇺" in lang_choice else "Select a make on the left!"))
+    st.info("💡 " + ("Válassz egy márkát bal oldalt és kattints a keresésre!" if "🇭🇺" in lang_choice else "Select a make on the left and click search!"))
