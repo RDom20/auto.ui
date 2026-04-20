@@ -1,79 +1,88 @@
 import streamlit as st
 import pandas as pd
+import requests
 
-# 1. NYELVI SZÓTÁR
+# 1. NYELVI SZÓTÁR (Zászlókkal)
 translations = {
     "hu": {
-        "title": "🚗 Nyílt Autóalkatrész Adatbázis",
-        "sidebar_header": "Keresési feltételek",
+        "title": "🚗 Open Vehicle Database Kereső",
+        "loading": "Adatok betöltése a GitHub-ról...",
+        "sidebar_header": "Szűrés",
         "brand_select": "Márka",
         "year_range": "Évjárat",
-        "cat_select": "Kategória",
-        "search_btn": "Keresés indítása 🔍",
+        "search_btn": "Keresés 🔍",
         "results": "Talált modellek",
-        "cats": ["Futómű", "Motor", "Elektronika", "Beltér", "Kültér", "Kaszni"],
-        "part_gen": "specifikus alkatrész"
+        "part_gen": "alkatrész",
+        "cats": ["Motor", "Elektronika", "Futómű", "Beltér"]
     },
     "en": {
-        "title": "🚗 Open Source Auto Parts Database",
-        "sidebar_header": "Search Filters",
-        "brand_select": "Brand",
+        "title": "🚗 Open Vehicle DB Search",
+        "loading": "Loading data from GitHub...",
+        "sidebar_header": "Filters",
+        "brand_select": "Make",
         "year_range": "Year Range",
-        "cat_select": "Category",
-        "search_btn": "Start Search 🔍",
+        "search_btn": "Search 🔍",
         "results": "Models Found",
-        "cats": ["Suspension", "Engine", "Electronics", "Interior", "Exterior", "Body"],
-        "part_gen": "specific part"
+        "part_gen": "part",
+        "cats": ["Engine", "Electronics", "Suspension", "Interior"]
     }
 }
 
-# 2. ADATOK IMPORTÁLÁSA VALÓDI FORRÁSBÓL
+# 2. ADATOK IMPORTÁLÁSA AZ "OPEN-VEHICLE-DB"-BŐL
 @st.cache_data
-def load_data():
-    # Ez egy garantáltan működő RAW GitHub link
-    url = "https://githubusercontent.com"
+def load_open_vehicle_db():
+    # Ez a link a repozitórium tartalmát kérdezi le
+    base_url = "https://githubusercontent.com"
     try:
-        df = pd.read_csv(url)
-        df = df[['make', 'model', 'year']]
-        df.columns = ['Márka', 'Modell', 'Év']
-        df['Év'] = pd.to_numeric(df['Év'], errors='coerce')
-        return df.dropna()
-    except:
-        # Vészhelyzeti adatok, ha a net nem érhető el
-        return pd.DataFrame({'Márka':['Audi', 'BMW', 'Ford'], 'Modell':['A4', '320d', 'Focus'], 'Év':[2015, 2018, 2020]})
+        # Ez a repozitórium szerencsére generál egy összefoglalt 'data.json' fájlt a 'dist' mappába
+        response = requests.get(base_url)
+        data = response.json()
+        
+        rows = []
+        for brand in data:
+            brand_name = brand['name']
+            for model in brand.get('models', []):
+                model_name = model['name']
+                # Évszámok kezelése (ha nincs megadva, 2000-2024 közé tesszük)
+                years = model.get('years', range(2005, 2025))
+                for year in years:
+                    rows.append({"Márka": brand_name, "Modell": model_name, "Év": year})
+        
+        return pd.DataFrame(rows)
+    except Exception as e:
+        st.error(f"Hiba az importáláskor: {e}")
+        return pd.DataFrame(columns=['Márka', 'Modell', 'Év'])
 
-df = load_data()
-
-# 3. UI BEÁLLÍTÁSA
-st.set_page_config(page_title="AutoDB Pro", layout="wide")
+# UI indítása
+st.set_page_config(page_title="OpenVehicleDB", layout="wide")
 
 # Nyelvválasztó
-col_t, col_l = st.columns([3, 1])
-with col_l:
-    lang = st.radio("Language / Nyelv", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
+_, lang_col = st.columns([3, 1])
+with lang_col:
+    lang = st.radio("Language", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
     t = translations["hu" if "🇭🇺" in lang else "en"]
 
-with col_t:
-    st.title(t["title"])
+st.title(t["title"])
 
-# 4. KERESŐ PANEL (JAVÍTOTT FORM)
+with st.spinner(t["loading"]):
+    df = load_open_vehicle_db()
+
+# 3. KERESŐ FORM
 with st.sidebar:
-    # Fontos: Minden ami a 'with form' alatt van, csak a gomb után küldődik el
     with st.form("search_form"):
         st.header(t["sidebar_header"])
         
-        brands = sorted(df['Márka'].unique())
-        selected_brands = st.multiselect(t["brand_select"], options=brands)
+        brand_list = sorted(df['Márka'].unique())
+        selected_brands = st.multiselect(t["brand_select"], options=brand_list)
         
         min_y, max_y = int(df['Év'].min()), int(df['Év'].max())
-        year_range = st.slider(t["year_range"], min_y, max_y, (min_y, max_y))
+        year_range = st.slider(t["year_range"], min_y, max_y, (2010, 2022))
         
-        cat_selection = st.multiselect(t["cat_select"], options=t["cats"], default=[t["cats"]])
+        cat_selection = st.multiselect("Kategória", options=t["cats"], default=[t["cats"]])
         
-        # Ez a gomb javítja a "Missing Submit Button" hibát!
         submit = st.form_submit_button(t["search_btn"])
 
-# 5. MEGJELENÍTÉS
+# 4. EREDMÉNYEK
 if submit:
     mask = df['Év'].between(year_range[0], year_range[1])
     if selected_brands:
@@ -88,6 +97,5 @@ if submit:
     else:
         st.warning("Nincs találat.")
 else:
-    # Kezdőképernyő mintaadatokkal
-    st.info("💡 Az adatbázis betöltve. Válassz a szűrőkből és kattints a Keresésre!")
-    st.dataframe(df.sample(min(len(df), 15)), use_container_width=True)
+    st.info("💡 Az Open Vehicle Database betöltve. Válassz márkát és keress!")
+    st.dataframe(df.sample(min(len(df), 20)), use_container_width=True)
