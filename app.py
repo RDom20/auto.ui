@@ -31,7 +31,7 @@ translations = {
     }
 }
 
-# 2. ADATOK BETÖLTÉSE - HIBATŰRŐ MÓDON
+# 2. ADATOK BETÖLTÉSE
 @st.cache_data
 def load_real_data():
     url = "https://githubusercontent.com"
@@ -40,23 +40,23 @@ def load_real_data():
         df_raw.columns = ['Márka', 'Modell', 'Év']
         df_raw['Év'] = pd.to_numeric(df_raw['Év'], errors='coerce')
         return df_raw.dropna()
-    except Exception as e:
-        # Ha nincs net vagy hiba van, egy alap listát adunk vissza
+    except:
         return pd.DataFrame({'Márka':['Audi', 'BMW', 'VW'], 'Modell':['A4', '320d', 'Golf'], 'Év':[2018, 2019, 2020]})
 
 df = load_real_data()
 
 st.set_page_config(page_title="Auto Search", layout="wide")
 
-# Nyelvválasztó
-_, lang_col = st.columns()
-with lang_col:
+# 3. NYELVVÁLASZTÓ (JAVÍTVA: megadva a 2-es szám az oszlopoknak)
+col_title, col_lang = st.columns(2)
+with col_lang:
     lang = st.radio("Language", options=["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
     t = translations["hu" if "🇭🇺" in lang else "en"]
 
-st.title(t["title"])
+with col_title:
+    st.title(t["title"])
 
-# --- KERESŐ FORM ---
+# 4. KERESŐ FORM
 with st.sidebar:
     with st.form("search_form"):
         st.header(t["sidebar_header"])
@@ -66,13 +66,12 @@ with st.sidebar:
         max_y = int(df['Év'].max())
         year_range = st.slider(t["year_range"], min_y, max_y, (2015, 2022))
         
-        cat_selection = st.multiselect(t["cat_select"], options=t["cats"], default=[t["cats"]])
+        cat_selection = st.multiselect(t["cat_select"], options=t["cats"], default=[t["cats"][2]]) # Alapértelmezett: Elektronika
         search_term = st.text_input(t["search_label"], "")
         submit_button = st.form_submit_button(label=t["search_btn"])
 
-# --- MEGJELENÍTÉS ---
+# 5. MEGJELENÍTÉS
 if submit_button:
-    # SZŰRT EREDMÉNYEK
     filt = df['Év'].between(year_range[0], year_range[1])
     if brand_selection:
         filt &= df['Márka'].isin(brand_selection)
@@ -89,13 +88,11 @@ if submit_button:
     else:
         st.warning("Nincs találat.")
 else:
-    # BIZTONSÁGOS RANDOM AJÁNLATOK
     st.subheader(t["random_title"])
-    # Megnézzük, van-e elég adat a sorsoláshoz
     sample_size = min(len(df), 10)
     if sample_size > 0:
         random_df = df.sample(sample_size).copy()
-        random_df['Kategória'] = t["cats"][0] # Csak egy példa kategória
+        random_df['Kategória'] = t["cats"][2] 
         random_df['Alkatrész'] = random_df['Márka'] + " " + t["part_gen"]
         st.dataframe(random_df, use_container_width=True)
-    st.info("💡 Használd a szűrőket bal oldalt a kereséshez!")
+    st.info("💡 Állítsd be a szűrőket bal oldalt, majd nyomj a Keresés gombra!")
