@@ -1,48 +1,89 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Minta Adatbázis létrehozása
-data = [
-    {"Márka": "BMW", "Modell": "320d", "Év": 2018, "Kivitel": "Sedan", "Motor": "2.0 Diesel", "Kategória": "Elektronika", "Alkatrész": "Első ajtó hangszóró (16cm)"},
-    {"Márka": "BMW", "Modell": "320d", "Év": 2018, "Kivitel": "Sedan", "Motor": "2.0 Diesel", "Kategória": "Motor", "Alkatrész": "Olajszűrő"},
-    {"Márka": "Audi", "Modell": "A4", "Év": 2020, "Kivitel": "Avant", "Motor": "2.0 TFSI", "Kategória": "Elektronika", "Alkatrész": "Mélynyomó (Csomagtér)"},
-    {"Márka": "Volkswagen", "Modell": "Golf 7", "Év": 2015, "Kivitel": "Hatchback", "Motor": "1.6 TDI", "Kategória": "Futómű", "Alkatrész": "Lengéscsillapító"},
-    {"Márka": "Volkswagen", "Modell": "Golf 7", "Év": 2015, "Kivitel": "Hatchback", "Motor": "1.6 TDI", "Kategória": "Elektronika", "Alkatrész": "Magassugárzó hangszóró"},
-    {"Márka": "Tesla", "Modell": "Model 3", "Év": 2022, "Kivitel": "Sedan", "Motor": "Electric", "Kategória": "Beltér", "Alkatrész": "Középső kijelző"},
-    {"Márka": "Ford", "Modell": "Focus", "Év": 2012, "Kivitel": "Kombi", "Motor": "1.0 EcoBoost", "Kategória": "Kaszni", "Alkatrész": "Első sárvédő (Bal)"},
-]
+# 1. NYELVI SZÓTÁR LÉTREHOZÁSA
+translations = {
+    "hu": {
+        "title": "🚗 Professzionális Alkatrész Adatbázis",
+        "sidebar_header": "Keresési feltételek",
+        "brand_select": "Márka kiválasztása",
+        "year_range": "Évjárat intervallum",
+        "cat_select": "Kategória",
+        "search_label": "Kulcsszó kereső (pl. hangszóró)",
+        "results_count": "Talált modellek száma",
+        "download_btn": "Lista letöltése CSV-ben",
+        "no_results": "Nincs találat a megadott szűrőkkel.",
+        "cats": ["Futómű", "Motor", "Elektronika", "Beltér", "Kültér", "Kaszni"],
+        "part_gen": "specifikus Hangszóró / Kábelköteg"
+    },
+    "en": {
+        "title": "🚗 Professional Auto Parts Database",
+        "sidebar_header": "Search Filters",
+        "brand_select": "Select Brand",
+        "year_range": "Year Range",
+        "cat_select": "Category",
+        "search_label": "Keyword search (e.g. speaker)",
+        "results_count": "Number of models found",
+        "download_btn": "Download list in CSV",
+        "no_results": "No results found with the given filters.",
+        "cats": ["Suspension", "Engine", "Electronics", "Interior", "Exterior", "Body"],
+        "part_gen": "specific Speaker / Wiring harness"
+    }
+}
 
-df = pd.DataFrame(data)
+# 2. ADATOK BETÖLTÉSE (MARAD A RÉGI FORRÁS)
+@st.cache_data
+def load_real_data():
+    url = "https://githubusercontent.com"
+    try:
+        raw_df = pd.read_csv(url)
+        df = raw_df[['make', 'model', 'year']].copy()
+        df.columns = ['Márka', 'Modell', 'Év']
+        return df
+    except:
+        return pd.DataFrame(columns=['Márka', 'Modell', 'Év'])
 
-# 2. UI Beállítások
-st.set_page_config(page_title="Autóalkatrész Adatbázis", layout="wide")
-st.title("🚗 Jármű-alkatrész Kereső Rendszer")
-st.sidebar.header("Szűrő Panelek")
+df = load_real_data()
 
-# 3. Szűrők (Sidebar)
-search_term = st.sidebar.text_input("Keresés név alapján (pl. hangszóró):", "")
+# 3. NYELVVÁLASZTÓ UI (Zászlókkal)
+st.set_page_config(page_title="Auto Parts DB", layout="wide")
 
-brand_filter = st.sidebar.multiselect("Márka", options=df["Márka"].unique(), default=df["Márka"].unique())
-year_filter = st.sidebar.slider("Kiadás éve", int(df["Év"].min()), int(df["Év"].max()), (int(df["Év"].min()), int(df["Év"].max())))
-cat_filter = st.sidebar.multiselect("Kategória", options=["Futómű", "Motor", "Elektronika", "Beltér", "Kültér", "Kaszni"], default=["Futómű", "Motor", "Elektronika", "Beltér", "Kültér", "Kaszni"])
+# Nyelvválasztó a jobb felső sarokban
+col1, col2 = st.columns([8, 2])
+with col2:
+    lang = st.radio("Language / Nyelv", options=["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
+    lang_code = "hu" if "🇭🇺" in lang else "en"
 
-# 4. Adatok szűrése a háttérben
-filtered_df = df[
-    (df["Márka"].isin(brand_filter)) &
-    (df["Év"].between(year_filter[0], year_filter[1])) &
-    (df["Kategória"].isin(cat_filter))
-]
+t = translations[lang_code]
+
+# 4. UI MEGJELENÍTÉSE A VÁLASZTOTT NYELVEN
+st.title(t["title"])
+st.sidebar.header(t["sidebar_header"])
+
+available_brands = sorted(df['Márka'].unique())
+brand_selection = st.sidebar.multiselect(t["brand_select"], options=available_brands, default=["Audi", "BMW"] if "Audi" in available_brands else None)
+
+year_range = st.sidebar.slider(t["year_range"], int(df['Év'].min()), int(df['Év'].max()), (2010, 2023))
+
+cat_selection = st.sidebar.multiselect(t["cat_select"], options=t["cats"], default=[t["cats"][2]]) # Alapértelmezett: Elektronika
+
+search_term = st.sidebar.text_input(t["search_label"], "")
+
+# 5. SZŰRÉS ÉS MEGJELENÍTÉS
+filtered_df = df[(df['Márka'].isin(brand_selection)) & (df['Év'].between(year_range[0], year_range[1]))].copy()
+
+# Alkatrészek generálása a választott nyelven
+filtered_df['Kategória'] = ", ".join(cat_selection) if cat_selection else "N/A"
+filtered_df['Alkatrész'] = filtered_df['Márka'] + " " + t["part_gen"]
 
 if search_term:
-    filtered_df = filtered_df[filtered_df["Alkatrész"].str.contains(search_term, case=False) | 
-                              filtered_df["Modell"].str.contains(search_term, case=False)]
+    filtered_df = filtered_df[filtered_df['Alkatrész'].str.contains(search_term, case=False)]
 
-# 5. Eredmények megjelenítése
-col1, col2, col3 = st.columns(3)
-col1.metric("Találatok száma", len(filtered_df))
-
+st.metric(t["results_count"], len(filtered_df))
 st.dataframe(filtered_df, use_container_width=True)
 
-# Üres állapot kezelése
-if filtered_df.empty:
-    st.warning("Nincs találat a megadott feltételekkel.")
+if not filtered_df.empty:
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.download_button(t["download_btn"], data=csv, file_name="parts.csv", mime="text/csv")
+else:
+    st.warning(t["no_results"])
