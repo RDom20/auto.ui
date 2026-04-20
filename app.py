@@ -1,14 +1,12 @@
 import streamlit as st
 import pandas as pd
-import requests
 
 # 1. NYELVI SZÓTÁR
 translations = {
     "hu": {
-        "title": "🚗 Élő Globális Autóalkatrész Adatbázis",
-        "loading": "Adatok lekérése a hivatalos szerverekről...",
+        "title": "🚗 Nyílt Autóalkatrész Adatbázis",
         "sidebar_header": "Keresési feltételek",
-        "brand_select": "Márka kiválasztása",
+        "brand_select": "Márka",
         "year_range": "Évjárat",
         "cat_select": "Kategória",
         "search_btn": "Keresés indítása 🔍",
@@ -17,10 +15,9 @@ translations = {
         "part_gen": "specifikus alkatrész"
     },
     "en": {
-        "title": "🚗 Live Global Auto Parts Database",
-        "loading": "Fetching data from official servers...",
+        "title": "🚗 Open Source Auto Parts Database",
         "sidebar_header": "Search Filters",
-        "brand_select": "Select Brand",
+        "brand_select": "Brand",
         "year_range": "Year Range",
         "cat_select": "Category",
         "search_btn": "Start Search 🔍",
@@ -30,72 +27,73 @@ translations = {
     }
 }
 
-# 2. ÉLŐ ADATLEKÉRÉS AZ NHTSA API-BÓL
+# 2. KÜLSŐ NYÍLT ADATBÁZIS IMPORTÁLÁSA (Open Source CSV)
 @st.cache_data
-def get_all_brands():
-    # Lekérjük az összes hivatalos autógyártót
-    url = "https://dot.gov"
-    response = requests.get(url).json()
-    brands = [item['Make_Name'] for item in response['Results']]
-    return sorted(brands)
+def load_external_csv():
+    # Ez a "RAW" link közvetlenül az adatokat adja át a kódnak
+    url = "https://githubusercontent.com"
+    try:
+        # Beolvassuk a külső CSV-t
+        df = pd.read_csv(url)
+        # Kiválasztjuk a szükséges oszlopokat és magyarosítjuk a neveket
+        df = df[['make', 'model', 'year']]
+        df.columns = ['Márka', 'Modell', 'Év']
+        # Tisztítás
+        df['Év'] = pd.to_numeric(df['Év'], errors='coerce')
+        return df.dropna().sort_values(['Márka', 'Modell'])
+    except Exception as e:
+        st.error(f"Hiba az adatbázis importálásakor: {e}")
+        return pd.DataFrame(columns=['Márka', 'Modell', 'Év'])
 
-def get_models_for_make(make):
-    # Lekérjük egy adott márka összes modelljét
-    url = f"https://dot.gov{make}?format=json"
-    response = requests.get(url).json()
-    models = [item['Model_Name'] for item in response['Results']]
-    return sorted(list(set(models)))
+# Adatok beolvasása a külső linkről
+df = load_external_csv()
 
 # 3. UI BEÁLLÍTÁSA
-st.set_page_config(page_title="Live Auto DB", layout="wide")
+st.set_page_config(page_title="OpenSource AutoDB", layout="wide")
 
 # Nyelvválasztó
-_, lang_col = st.columns([4, 1])
+_, lang_col = st.columns(2)
 with lang_col:
-    lang = st.radio("Nyelv", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
+    lang = st.radio("Language / Nyelv", ["🇭🇺 HU", "🇺🇸 EN"], horizontal=True)
     t = translations["hu" if "🇭🇺" in lang else "en"]
 
 st.title(t["title"])
 
-# Adatok betöltése
-with st.spinner(t["loading"]):
-    all_brands = get_all_brands()
-
-# 4. KERESŐ PANEL
+# 4. KERESŐ PANEL (A SIDEBAR-BAN)
 with st.sidebar:
     with st.form("search_form"):
         st.header(t["sidebar_header"])
         
-        # Itt már több ezer márka van!
-        selected_make = st.selectbox(t["brand_select"], options=all_brands, index=all_brands.index("BMW") if "BMW" in all_brands else 0)
+        # Dinamikusan feltölti a márkákat a külső fájlból (kb. 50-100 márka)
+        selected_brands = st.multiselect(t["brand_select"], options=sorted(df['Márka'].unique()))
         
-        year = st.slider(t["year_range"], 1995, 2025, (2015, 2023))
+        min_y, max_y = int(df['Év'].min()), int(df['Év'].max())
+        year_range = st.slider(t["year_range"], min_y, max_y, (2010, 2023))
         
         cat_selection = st.multiselect(t["cat_select"], options=t["cats"], default=[t["cats"]])
         
         submit = st.form_submit_button(t["search_btn"])
 
-# 5. EREDMÉNYEK MEGJELENÍTÉSE
+# 5. SZŰRÉS ÉS EREDMÉNYEK
 if submit:
-    with st.spinner(f"Modellek betöltése: {selected_make}..."):
-        models = get_models_for_make(selected_make)
+    # Szűrési logika a külső adatokon
+    mask = df['Év'].between(year_range[0], year_range[1])
+    if selected_brands:
+        mask &= df['Márka'].isin(selected_brands)
+    
+    res = df[mask].copy()
+    
+    if not res.empty:
+        # Virtuális alkatrész adatok hozzárendelése
+        res['Kategória'] = ", ".join(cat_selection) if cat_selection else "N/A"
+        res['Alkatrész'] = res['Márka'] + " " + res['Modell'] + " " + t["part_gen"]
         
-        if models:
-            # Táblázat összeállítása
-            data = []
-            for m in models:
-                data.append({
-                    "Márka": selected_make,
-                    "Modell": m,
-                    "Év": f"{year}-{year}",
-                    "Kategória": ", ".join(cat_selection),
-                    "Alkatrész": f"{selected_make} {m} {t['part_gen']}"
-                })
-            
-            df_res = pd.DataFrame(data)
-            st.subheader(f"{t['results']}: {selected_make}")
-            st.dataframe(df_res, use_container_width=True)
-        else:
-            st.warning("Nem találtunk modellt ehhez a márkához.")
+        st.subheader(f"{t['results']}: {len(res)}")
+        st.dataframe(res, use_container_width=True)
+    else:
+        st.warning("Nincs találat.")
 else:
-    st.info("💡 Válassz egy márkát a listából (több ezer van!) és nyomj a keresésre.")
+    # Alapállapot: Mutassunk egy mintát a külső adatbázisból
+    st.info("💡 Az adatbázis sikeresen importálva a GitHub-ról. Használd a szűrőket!")
+    if not df.empty:
+        st.dataframe(df.sample(20), use_container_width=True)
